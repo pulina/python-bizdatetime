@@ -280,7 +280,10 @@ class Policy(object):
             # remaining days may or may not include weekends;
             new_date = new_date + timedelta(sign)
             if not self.is_weekend(new_date):
-                days_add -= 1
+                if days_add > 0:
+                    days_add -= 1
+                else:
+                    days_add += 1
 
         days_add = self.holidays_between(day, new_date)  # any holidays?
         if days_add:
