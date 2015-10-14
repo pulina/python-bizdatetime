@@ -22,7 +22,7 @@ FRI = 4
 SAT = 5
 SUN = 6
 
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, date
 
 
 def set_time(day, hour):
