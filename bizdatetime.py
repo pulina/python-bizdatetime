@@ -155,9 +155,15 @@ class Policy(object):
             delta = timedelta(days=1)
         else:
             delta = timedelta(days=-1)
-        while day.weekday() in self.weekends or day in self.holidays:
+        while day.weekday() in self.weekends or self.get_only_date(day) in self.holidays:
             day = day + delta
         return day
+
+    @staticmethod
+    def get_only_date(datetime_like_obj):
+        if isinstance(datetime_like_obj, datetime):
+            return datetime_like_obj.date()
+        return datetime_like_obj
 
     def holidays_between(self, day1, day2, skip_weekends=True):
         """
@@ -215,34 +221,52 @@ class Policy(object):
                 day = set_time(day, time())
             return self.closest_biz_day(day + timedelta(seconds=seconds))
 
+        forward=seconds>0
         begin_hours = self.hours[0]
         end_hours = self.hours[1]
 
         # Put us in business hours
         if self.is_day_off(day):
-            day = set_time(day, begin_hours)
-            day = self.closest_biz_day(day, forward=True)
+            day = set_time(day, forward and begin_hours or end_hours)
+            day = self.closest_biz_day(day, forward=forward)
 
         elif self.is_not_in_business_hours(day):
             if day.time() > begin_hours:
                 day += timedelta(days=1)
-            day = set_time(day, begin_hours)
+                day = set_time(day, begin_hours)
+            elif day.time() < begin_hours:
+                day += timedelta(days=-1)
+                day = set_time(day, end_hours)
 
         # Fill the current day
         end_of_day = set_time(day, end_hours)
+        start_of_day = set_time(day, begin_hours)
         if day.time() > end_hours:
             end_of_day += timedelta(days=1)
-        seconds_in_day = (end_of_day - day).seconds
+        elif day.time() < begin_hours:
+            start_of_day += timedelta(days=-1)
 
-        if seconds <= seconds_in_day:
+        if forward:
             # All the seconds are in the current day
-            return day + timedelta(seconds=seconds)
-        else:
+            seconds_in_day_forward = (end_of_day - day).seconds
+            if seconds <= seconds_in_day_forward:
+                return day + timedelta(seconds=seconds)
             # Move to next day
             if not (day.time() < begin_hours):
                 day += timedelta(days=1)
             next_day = set_time(day, begin_hours)
-            return self.add_seconds(next_day, seconds - seconds_in_day)
+            return self.closest_biz_day(self.add_seconds(next_day, seconds - seconds_in_day_forward), forward=forward)
+        else:
+            # All the seconds are in the current day
+            # XXX: fix uncommon behavior of negative timedeltas. Detailed described in add method definition.
+            seconds_in_day_backward = -(86400 - (start_of_day - day).seconds)
+            if seconds >= -seconds_in_day_backward:
+                return day + timedelta(seconds=seconds)
+            # Move to previous day
+            if not (day.time() > end_hours):
+                day += timedelta(days=-1)
+            next_day = set_time(day, end_hours)
+            return self.closest_biz_day(self.add_seconds(next_day, seconds - seconds_in_day_backward), forward=forward)
 
     def add_days(self, day, days):
         """Adds the given number of days.
@@ -267,9 +291,27 @@ class Policy(object):
             sign = 1
             look_forward = True
 
+        if self.hours:
+            begin_hours = self.hours[0]
+            end_hours = self.hours[1]
+
+            if self.is_not_in_business_hours(day):
+                if look_forward:
+                    if day.time() < begin_hours:
+                        day = set_time(day, begin_hours)
+                    elif day.time() > end_hours:
+                        day += timedelta(days=1)
+                        day = set_time(day, begin_hours)
+                else:
+                    if day.time() < begin_hours:
+                        day += timedelta(days=-1)
+                        day = set_time(day, end_hours)
+                    elif day.time() > end_hours:
+                        day = set_time(day, end_hours)
+
         if self.weekends:
             weeklen = 7 - len(self.weekends)
-            weeks_add = abs(days) / weeklen * sign
+            weeks_add = int(abs(days) / weeklen * sign)
             days_add = abs(days) % weeklen * sign
         else:
             weeks_add = 0
@@ -280,7 +322,7 @@ class Policy(object):
             # remaining days may or may not include weekends;
             new_date = new_date + timedelta(sign)
             if not self.is_weekend(new_date):
-                if days_add > 0:
+                if look_forward:
                     days_add -= 1
                 else:
                     days_add += 1
@@ -338,7 +380,7 @@ class Policy(object):
         if day2 < day1:
             return self.weekends_between(day2, day1)
         delta = day2 - day1
-        weeks = delta.days / 7
+        weeks = int(delta.days / 7)
         extra = delta.days % 7
         n = weeks * len(self.weekends)
         while extra:
