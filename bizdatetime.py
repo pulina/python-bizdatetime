@@ -339,6 +339,14 @@ class Policy(object):
         Delta should be a timedelta object, possibly negative.
         For backwards compatibility, it can also be an integer representing a number of days.
 
+        NOTE: There is not way to distinguish timedelta(days=-1,hours=0) and timedelta(days=0,hours=-24) due to
+        uncommon behavior of negative timedeltas. In first case one day mean that we want to back in time 8 hours
+        working with 8 hours working day. In seconds case we wont to back 24 working hours. Fix that behavior treats
+        timedelta(days=-1,hours=-1) like timedelta(days=0,hours=-25).
+
+        This implies that using timedelta with day and hours we must remember that value of day is not equal numer
+        of working hours declared in policy.
+
         >>> policy = Policy(weekends=(SAT, SUN), holidays=(date(2011,7,1), date(2011,8,1)))
         >>> day = date(2011, 6, 29) # Wednesday
         >>> policy.add(day, timedelta(days=2)) # Monday after the long weekend

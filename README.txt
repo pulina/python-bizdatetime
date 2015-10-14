@@ -56,3 +56,15 @@ datetime.datetime(2011, 6, 29, 19, 30)
 datetime.datetime(2011, 7, 4, 12, 30)
 
 Policy method docstrings contain more examples.
+
+
+NOTES
+=====
+
+There is not way to distinguish timedelta(days=-1,hours=0) and timedelta(days=0,hours=-24) due to
+common behavior of negative timedeltas. In first case one day mean that we want to back in time 8 hours
+working with 8 hours working day. In seconds case we wont to back 24 working hours. Fix that behavior treats
+timedelta(days=-1,hours=-1) like timedelta(days=0,hours=-25).
+
+This implies that using timedelta with day and hours we must remember that value of day is not equal numer
+of working hours declared in policy.
