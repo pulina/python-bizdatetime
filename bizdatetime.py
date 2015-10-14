@@ -27,7 +27,7 @@ from datetime import datetime, time, timedelta, date
 
 def set_time(day, hour):
     """Set the time of the day to the given hour."""
-    return day.replace(hour=hour.hour, minute=hour.minute, second=hour.second)
+    return day.replace(hour=hour.hour, minute=hour.minute, second=hour.second, microsecond=0)
 
 
 class Policy(object):
