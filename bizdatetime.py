@@ -367,12 +367,10 @@ class Policy(object):
             # Fixing it buy return hardly calculated seconds.
             delta_sec = delta.seconds
             if delta.days and delta.seconds and delta.days < 0:
-                delta_sec = -(86400 - delta_sec)
-                delta += timedelta(days=1)
+                delta_sec = -(86400 - delta_sec) - 24 * 60 * delta.days
+                delta = timedelta(days=0)
             # Add hours only if the given day is a datetime
             day = self.add_seconds(day, delta_sec)
-
-
         return self.add_days(day, delta.days)
 
     def weekends_between(self, day1, day2):
