@@ -44,14 +44,14 @@ class Policy(object):
             holidays: list or tuple, all the holidays.
             hours: list or tuple of datetime.time, when work begins and ends during a day.
         """
-        if len(weekends) > 6:
-            raise AssertionError("Too many weekends per week")
-        if hours is not None and len(hours) != 2:
-            raise AssertionError("Working hours must specify a beginning and an end")
         self.weekends = weekends or []
         self._holidays = []
         self._set_holidays(holidays)
         self.hours = hours
+        if len(self.weekends) > 6:
+            raise AssertionError("Too many weekends per week")
+        if hours is not None and len(hours) != 2:
+            raise AssertionError("Working hours must specify a beginning and an end")
 
     def _get_holidays(self):
         return self._holidays
@@ -209,11 +209,11 @@ class Policy(object):
             day: datetime.datetime, the given day.
             seconds: integer, the number of seconds to add.
 
-        >>> policy = Policy(weekends=(SAT, SUN), holidays=(date(2011,7,1)), hours=(time(8), time(20)))
+        >>> policy = Policy(weekends=(SAT, SUN), holidays=(date(2011,7,1),), hours=(time(8), time(20)))
         >>> day = datetime(2011, 6, 30, 14, 30)
         >>> policy.add_seconds(day, 3600) # One hour after
         datetime.datetime(2011, 6, 30, 15, 30)
-        >>> policy.add(day, 36000) # The next working day
+        >>> policy.add_seconds(day, 36000) # The next working day
         datetime.datetime(2011, 7, 4, 12, 30)
         """
         if self.hours is None:
@@ -281,7 +281,7 @@ class Policy(object):
         datetime.date(2011, 7, 4)
         >>> policy.add_days(day, 22) # Spanning two holidays and several weekends
         datetime.date(2011, 8, 2)
-        >>> policy.add_days(day, 10, reverse=True) # 10 business days (2 weeks) ago
+        >>> policy.add_days(day, -10) # 10 business days (2 weeks) ago
         datetime.date(2011, 6, 15)
         """
         if days < 0:
@@ -345,13 +345,13 @@ class Policy(object):
         datetime.date(2011, 7, 4)
         >>> policy.add(day, timedelta(days=22)) # Spanning two holidays and several weekends
         datetime.date(2011, 8, 2)
-        >>> policy.add(day, timedelta(days=10), reverse=True) # 10 business days (2 weeks) ago
+        >>> policy.add(day, timedelta(days=-10)) # 10 business days (2 weeks) ago
         datetime.date(2011, 6, 15)
 
-        >>> policy = Policy(weekends=(SAT, SUN), holidays=(date(2011,7,1)), hours=(time(8), time(20)))
+        >>> policy = Policy(weekends=(SAT, SUN), holidays=(date(2011,7,1),), hours=(time(8), time(20)))
         >>> day = datetime(2011, 6, 29, 14, 30)
         >>> policy.add(day, timedelta(days=1, hours=5)) # The day after, in the afternoon
-        datetime.datetime(2011, 6, 29, 19, 30)
+        datetime.datetime(2011, 6, 30, 19, 30)
         >>> policy.add(day, timedelta(days=1, hours=10)) # Too many hours, will finish the monday after the long weekend
         datetime.datetime(2011, 7, 4, 12, 30)
         """
@@ -359,9 +359,19 @@ class Policy(object):
         if isinstance(delta, int):
             delta = timedelta(days=delta)
 
-        if isinstance(day, datetime):
+        if isinstance(day, datetime) and delta.seconds != 0:
+            # Fix uncommon behavior of negative timedeltas.
+            # https://docs.python.org/2/library/datetime.html#timedelta-objects Note.5
+            # Timedelta(hours=-1) is representing by timedelta(-1, 82800) due to normalized similarly to their
+            # internal representation. In this case it makes difference because not omitting non business hours.
+            # Fixing it buy return hardly calculated seconds.
+            delta_sec = delta.seconds
+            if delta.days and delta.seconds and delta.days < 0:
+                delta_sec = -(86400 - delta_sec)
+                delta += timedelta(days=1)
             # Add hours only if the given day is a datetime
-            day = self.add_seconds(day, delta.seconds)
+            day = self.add_seconds(day, delta_sec)
+
 
         return self.add_days(day, delta.days)
 
@@ -369,10 +379,11 @@ class Policy(object):
         """
         Returns the number of weekends between two dates, including upper boundary.
 
+        Note that int cast is for python3 compatibility.
         >>> policy = Policy(weekends=(SAT, SUN))
-        >>> policy.weekends_between(date(2011, 6, 3), date(2011, 6, 15))
+        >>> int(policy.weekends_between(date(2011, 6, 3), date(2011, 6, 15)))
         4
-        >>> policy.weekends_between(date(2011, 6, 4), date(2011, 6, 11)) # SAT to SAT
+        >>> int(policy.weekends_between(date(2011, 6, 4), date(2011, 6, 11))) # SAT to SAT)
         2
         """
 
